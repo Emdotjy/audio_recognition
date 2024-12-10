@@ -1,12 +1,9 @@
 import librosa
 import os
 import numpy as np
-input_folder='./digit_dataset'
-
-data_audio = []
-data_Fe= []
-labels = []
-N = 60
+from scipy.linalg import toeplitz
+from numpy.linalg import inv
+from get_frame import auto_get_frames
 
 
 def calcul_lpc_frame(f, ordre_modele):
@@ -19,7 +16,7 @@ def calcul_lpc_frame(f, ordre_modele):
             
     m_R = toeplitz(R)
 
-    v = np.zeross((ordre_modele+1,1))
+    v = np.zeros((ordre_modele+1,1))
     v[0] = 1
 
     lpc = np.dot(inv(m_R),v)
@@ -32,20 +29,26 @@ def calcul_lpc_frame(f, ordre_modele):
 
 
 def distance_elastique(a,b):
-    tableau_res = np.array(shape = (len(a),len(b)))
+    tableau_res = np.array((len(a),len(b)))
     wv = 1
     wd = 1
     wh = 1
     for i in range(len(a)):
         for j in range(len(b)):
-            if i ==0 :
-                tableau_res[i,j] = j
-            else:
-                dij = 1*(np.mean((a[i] - b[j])**2))
+            print(a[i])
+            dij = np.mean([(a[i] - b[j])**2])
+            if j==0 and i == 0:
+                tableau_res[i,j] = dij
+            elif i ==0 :
+                tableau_res[i,j] = tableau_res[i,j-1] + dij
+            elif j == 0:
+                tableau_res[i,j] = tableau_res[i-1,j] + dij
+            else:                
                 terme1 = tableau_res[i-1,j] + wv*dij     
                 terme2 = tableau_res[i-1,j-1] + wd*dij  
                 terme3 = tableau_res[i,j-1] + wh*dij  
                 tableau_res[i,j] = min(terme1,terme2,terme3)
+                
     return tableau_res[len(a),len(b)] 
 
 def k_min_args(list,k):
@@ -68,27 +71,63 @@ def knn_predict(dists, labels_train , k):
         predicted_labels.append(most_neighbor_label)
     return predicted_labels
 
+def split_train_test(lists, train_ratio=0.8):
+    train_lists = []
+    test_lists = []
+    for lst in lists:
+        split_index = int(len(lst) * train_ratio)
+        train_lists.append(lst[:split_index])
+        test_lists.append(lst[split_index:])
+    return train_lists, test_lists
 
-for dirname in os.listdir(input_folder):
-    subfolder = os.path.join(input_folder, dirname)
-    if not os.path.isdir(subfolder):
-        continue
-     
-    for filename in [x for x in os.listdir(subfolder) if x.endswith('.wav')]:
-        filepath = os.path.join(subfolder, filename)
-        audio, Fe = librosa.load(filepath)
-        data_audio.append( audio)
-        data_Fe.append(Fe)
-        labels.append(dirname)
 
-R = np.zeros(shape = (len(audio),N,N))
-for num_audio,audio in enumerate(data_audio):
-    Y = np.array([np.std(audio)**2]+[0]*N)
-    for i in range(N):
-        R[num_audio,0,i] = sum([audio[i+t]*audio[t] for t in range(1,N-i+1)])
-        R[num_audio,i,0] = sum([audio[i+t]*audio[t] for t in range(1,N-i+1)])
+if __name__ == "__main__":
+    input_folder='./digit_dataset'
 
-print(R[1,:,:])
+    data_audio_lpc = []
+    data_Fe= []
+    labels = []
+    N = 60
+    k = 5
+    ordre_modele = 20
+    for dirname in os.listdir(input_folder):
+        subfolder = os.path.join(input_folder, dirname)
+        if not os.path.isdir(subfolder):
+            continue
+        
+        for filename in [x for x in os.listdir(subfolder) if x.endswith('.wav')]:
+            filepath = os.path.join(subfolder, filename)
+            audio, Fe = librosa.load(filepath)
+
+            data_audio_lpc.append(auto_get_frames(filepath)) 
+            data_Fe.append(Fe)
+            labels.append(dirname)
+
+    train_data, test_data = split_train_test([data_audio_lpc,data_Fe,labels], train_ratio=0.8)
+    (data_audio_train, data_Fe_train, labels_train) = train_data
+    (data_audio_test, data_Fe_test, labels_test) = train_data    
+    lpc_frames_train = []
+    lpc_frames_test = []
+    for i in range(len(data_audio_train)):
+        lpc_frames_train.append( calcul_lpc_frame(data_audio_train[i],ordre_modele))
+
+    for i in range(len(data_audio_test)):
+        lpc_frames_train.append( calcul_lpc_frame(data_audio_test[i],ordre_modele))
+
+
+    matrix = np.zeros((len(lpc_frames_train), len(lpc_frames_test)))
+        
+    
+    for i, lpc_one_audio_train in enumerate(lpc_frames_train):
+        for j, lpc_one_audio_test in enumerate(lpc_frames_test):
+            matrix[i, j] = distance_elastique(lpc_one_audio_train, lpc_one_audio_test)
+        
+    predicted_labels = knn_predict(matrix,labels_train,k)
+    assert len(predicted_labels) == len(labels_test)
+    accuracy = sum([(predicted_labels[i] == labels_test[i]) for i in range(len(predicted_labels))])
+    print(f"On obient un taux de classification correcte de {accuracy*100} %")
+
+
 
 
 

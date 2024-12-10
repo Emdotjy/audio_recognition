@@ -52,16 +52,16 @@ def auto_get_frames(file_path: str):
     print(f"Décalage entre frames (hop_length) : {hop_length}")
     print(f"Nombre total de frames : {frames.shape[1]}")
     
-    return frames, sr
+    return frames
 
+if __name__=="__main__":
+    # Chemin vers le fichier audio
+    file_path = './digit_dataset/0/0_jackson_0.wav'
 
-# Chemin vers le fichier audio
-file_path = './digit_dataset/0/0_jackson_0.wav'
+    # Appeler la fonction pour découper automatiquement en frames
+    frames = auto_get_frames(file_path)
 
-# Appeler la fonction pour découper automatiquement en frames
-frames, sr = auto_get_frames(file_path)
-
-# Afficher des informations sur les frames
-print(f"Nombre total de frames : {frames.shape[1]}")
-print(f"Taille de chaque frame : {frames.shape[0]}")
-print(f"Exemple de la première frame : {frames[:, 0]}")
+    # Afficher des informations sur les frames
+    print(f"Nombre total de frames : {frames.shape[1]}")
+    print(f"Taille de chaque frame : {frames.shape[0]}")
+    print(f"Exemple de la première frame : {frames[:, 0]}")

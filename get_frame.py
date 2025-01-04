@@ -7,22 +7,21 @@ def nearest_power_of_2(n):
     """
     return 2 ** int(np.round(np.log2(n)))
 
-def auto_get_frames(file_path: str):
+def auto_get_frames(y, sr):
     """
     Découpe automatiquement un fichier audio en frames.
     La taille des frames, le hop_length et la durée des frames sont choisis en fonction
     de la durée de l'audio et de son taux d'échantillonnage.
     
     Args:
-    - file_path (str): Chemin vers le fichier audio à traiter.
+    y = signal
+    sr = taux d'échantillonnage
     
     Returns:
     - frames (np.ndarray): Un tableau 2D où chaque colonne représente une frame.
     - sr (int): Le taux d'échantillonnage du fichier audio.
+
     """
-    # Charger l'audio
-    y, sr = librosa.load(file_path, sr=None)  # y = signal, sr = taux d'échantillonnage
-    
     # Calculer la durée totale de l'audio en secondes
     audio_duration = len(y) / sr
     
@@ -44,22 +43,17 @@ def auto_get_frames(file_path: str):
     # Découper le signal en frames
     frames = librosa.util.frame(y, frame_length=frame_length, hop_length=hop_length)
     
-    # Afficher des infos
-    print(f"Taux d'échantillonnage : {sr} Hz")
-    print(f"Durée totale de l'audio : {audio_duration:.2f} secondes")
-    print(f"Durée de la frame choisie : {frame_duration_ms} ms")
-    print(f"Nombre d'échantillons par frame (frame_length) : {frame_length}")
-    print(f"Décalage entre frames (hop_length) : {hop_length}")
-    print(f"Nombre total de frames : {frames.shape[1]}")
     
+   
     return frames
 
 if __name__=="__main__":
     # Chemin vers le fichier audio
     file_path = './digit_dataset/0/0_jackson_0.wav'
+    y, sr = librosa.load(file_path, sr=None) 
 
     # Appeler la fonction pour découper automatiquement en frames
-    frames = auto_get_frames(file_path)
+    frames = auto_get_frames(y, sr)
 
     # Afficher des informations sur les frames
     print(f"Nombre total de frames : {frames.shape[1]}")

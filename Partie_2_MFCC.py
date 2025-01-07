@@ -54,61 +54,59 @@ def split_train_test(data_list, train_ratio=0.8, randomize=True):
     test  = data_list[split_index:]
     return train, test
 
+def split_train_test_by_label(data_dict,train_ratio = 0.8, randomize = True):
+
+    label_list = data_dict.keys()
+    train_dict  = dict()
+    test_dict = dict()
+
+    for label in label_list:
+        data_train,data_test = split_train_test(data_dict[label])
+        train_dict[label] = data_train
+        test_dict[label] = data_test
+
+    return train_dict, test_dict
+
+def calculate_mfcc_and_length_for_dict(data_audio_Fe_dict):
+    mfcc_dict = {}
+    length_dict = {}
+    for label in data_audio_Fe_dict.keys():
+
+
+        data_audio = []
+        data_Fe_train = []
+        for audio,Fe in data_audio_Fe_dict[label]:
+            data_audio.append(audio)
+            data_Fe_train.append(Fe)
+
+        train_mfcc = []
+        lengths= []
+        for num_audio, audio_train in enumerate(data_audio):
+            mfcc_features = mfcc(y=audio_train, sr=data_Fe_train[num_audio], n_mfcc=15, win_length=512, hop_length=512//2)
+            train_mfcc.append(mfcc_features.T)
+            lengths.append(len(mfcc_features.T))
+
+        length_dict[label] = lengths
+        mfcc_dict[label] = np.concatenate(train_mfcc, axis=0)
+
+    return mfcc_dict, length_dict
+
 
 if __name__ == "__main__":
 
-    audio, Fe = librosa.load('1_theo_47.wav')
-
 
     input_folder='./digit_dataset'
-
     ordre_modele = 30
-
     data_audio = load_data(input_folder)
 
-    mfcc_features = mfcc(y=audio, sr=Fe, n_mfcc=15, win_length=512,
-    hop_length=512//2 )
-    data_audio = load_data(input_folder)
+    data_audio_Fe_train , data_audio_Fe_test = split_train_test_by_label(data_audio, train_ratio=0.8, randomize=True)
+
+    train_mfcc_dict,lengths_train = calculate_mfcc_and_length_for_dict(data_audio_Fe_train)
+    test_mfcc_dict,lengths_test = calculate_mfcc_and_length_for_dict(data_audio_Fe_test)
+
+
 
     label_list = data_audio.keys()
-    accuracy = []
-    train_mfcc_dict  = dict()
-    test_mfcc_dict = dict()
-    lengths_train = dict()
-    lengths_test = dict()
-
-
-    for label in label_list:
-        train_mfcc = []
-        lengths_train[label] = []
-
-        test_mfcc = []
-
-        data_audio_Fe_train,data_audio_Fe_test = split_train_test(data_audio[label])
-
-        data_audio_train = []
-        data_Fe_train = []
-        for (audio_train, fe_train) in data_audio_Fe_train:
-            data_audio_train.append(audio_train)
-            data_Fe_train.append(fe_train)
-
-        data_audio_test = []
-        data_Fe_test = []
-        for (audio_test, fe_test) in data_audio_Fe_test:
-            data_audio_test.append(audio_test)
-            data_Fe_test.append(fe_test)
-
-        for num_audio,audio_train in enumerate(data_audio_train):
-            train_mfcc.append(mfcc(y=audio_train, sr=data_Fe_train[num_audio], n_mfcc=15, win_length=512,hop_length=512//2 ))
-            lengths_train[label].append(len(train_mfcc[-1]))
-
-        for num_audio,audio_test in enumerate(data_audio_test):
-            test_mfcc.append(mfcc(y=audio_test, sr=data_Fe_test[num_audio], n_mfcc=15, win_length=512,hop_length=512//2 ))
-            lengths_test[label].append(len(test_mfcc[-1]))
-        
-        train_mfcc_dict[label] = np.concatenate(train_mfcc, axis=0) 
-        test_mfcc_dict[label] = np.concatenate(test_mfcc, axis=0) 
-
     #entrainement des modèles
     model_dict = dict()
     for label in label_list:
@@ -123,7 +121,7 @@ if __name__ == "__main__":
         # On prédit pour chaque classe 
         score = dict()
         for y,label_model in enumerate(label_list):
-            score[label] = (model_dict(label_model).score(test_mfcc_dict[label_test],lengths_test[label_test]))
+            score[label] = (model_dict[label_model].score(test_mfcc_dict[label_test],lengths_test[label_test]))
         
         prediction = max(score,key=score.get)
         confusion_matrix[(x,label_model.index(prediction))]

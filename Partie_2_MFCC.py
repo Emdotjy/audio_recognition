@@ -7,7 +7,7 @@ from hmmlearn import hmm
 import matplotlib.pyplot as plt
 import random
 
-def load_data(input_folder, sr=16000):
+def load_data(input_folder, sr=16000, include_prefix=None, exclude_prefix=None):
     """
     Loads and processes .wav files from subfolders of `input_folder`. 
     Returns a dictionary: {
@@ -22,6 +22,10 @@ def load_data(input_folder, sr=16000):
         Path to the parent folder containing labeled subfolders.
     sr: int
         Sampling rate to use for loading audio files.
+    include_prefix: str or None
+        If specified, only include files starting with this prefix.
+    exclude_prefix: str or None
+        If specified, exclude files starting with this prefix.
     """
     # This dictionary will map each label (dirname) to a list of frames
     data_by_label = {}
@@ -34,10 +38,14 @@ def load_data(input_folder, sr=16000):
         audio_Fe_list = []
         # Traverse all .wav files in the current subfolder
         for filename in [x for x in os.listdir(subfolder) if x.endswith('.wav')]:
+            if include_prefix and not filename.startswith(include_prefix):
+                continue
+            if exclude_prefix and filename.startswith(exclude_prefix):
+                continue
             filepath = os.path.join(subfolder, filename)
             audio, Fe = librosa.load(filepath, sr=sr)
             audio = audio / np.max(np.abs(audio))
-            audio_Fe_list.append((audio,Fe))
+            audio_Fe_list.append((audio, Fe))
             
         data_by_label[dirname] = audio_Fe_list
 

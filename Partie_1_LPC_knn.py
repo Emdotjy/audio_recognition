@@ -12,24 +12,41 @@ from sklearn.metrics import ConfusionMatrixDisplay
 
 
 def calcul_lpc_frame(f, ordre_modele):
+    """
+    Calcule les coefficients LPC pour une trame audio donnée.
 
+    Arguments:
+    f -- la trame audio
+    ordre_modele -- l'ordre du modèle LPC
+
+    Retourne:
+    lpc -- les coefficients LPC normalisés
+    """
     t_fenetre = len(f)
 
+    # Calculer les autocovariances R(i) pour i allant de 0 à ordre_modele
     R = np.zeros((ordre_modele+1,1))
     for k in range(ordre_modele+1):
-        R[k] = np.mean(f[0:t_fenetre-1-k]*f[k:t_fenetre-1])
-            
+        R[k] = np.mean(f[0:t_fenetre-1-k] * f[k:t_fenetre-1])
+    
+    # Construire la matrice de Toeplitz à partir des autocovariances
     m_R = toeplitz(R)
 
+    # Créer un vecteur avec 1 en première position et 0 ailleurs
     v = np.zeros((ordre_modele+1,1))
     v[0] = 1
 
-    lpc = np.dot(inv(m_R),v)
-    lpc = lpc/lpc[0]
+    # Résoudre l'équation de Yule-Walker pour obtenir les coefficients LPC
+    lpc = np.dot(inv(m_R), v)
+    
+    # Normaliser les coefficients LPC
+    lpc = lpc / lpc[0]
 
+    # Retourner les coefficients LPC sans la première valeur (qui est 1 après normalisation)
     return lpc[1:]
 
-
+def normalize_lpc_coefficients(lpc_coeffs):
+    return lpc_coeffs / np.sqrt(np.sum(lpc_coeffs**2))
 
 def process_audio_to_lpc(data_audio, labels, ordre_modele, batch_size=50, prefix=""):
     """
@@ -74,34 +91,63 @@ def process_audio_to_lpc(data_audio, labels, ordre_modele, batch_size=50, prefix
     return lpc_arrays, processed_labels
 
 @njit
-def distance_elastique(a,b):
-    tableau_res = np.zeros((len(a),len(b)) )
+def distance_elastique(a, b):
+    """
+    Calcule la distance élastique entre deux séquences de coefficients LPC.
+
+    Arguments:
+    a -- première séquence de coefficients LPC
+    b -- deuxième séquence de coefficients LPC
+
+    Retourne:
+    tableau_res[len(a)-1, len(b)-1] -- la distance élastique entre les deux séquences
+    """
+    tableau_res = np.zeros((len(a), len(b)))
     wv = 1.0
     wd = 1.0
     wh = 1.0
+
     for i in range(len(a)):
         for j in range(len(b)):
-
-            # dij est calculé dans une boucle pour être compris par numba
+            # Calculer la distance locale dij comme la somme des carrés des différences entre les coefficients LPC
             dij = 0.0
             for k in range(len(a[i])):  
                 dij += (a[i][k] - b[j][k]) ** 2
                 
-            if j==0 and i == 0:
-                tableau_res[i,j] = dij
-            elif i ==0 :
-                tableau_res[i,j] = tableau_res[i,j-1] + dij*wh
+            if j == 0 and i == 0:
+                tableau_res[i, j] = dij
+            elif i == 0:
+                tableau_res[i, j] = tableau_res[i, j-1] + dij * wh
             elif j == 0:
-                tableau_res[i,j] = tableau_res[i-1,j] + dij*wv
-            else:                
-                terme1 = tableau_res[i-1,j] + wv*dij     
-                terme2 = tableau_res[i-1,j-1] + wd*dij  
-                terme3 = tableau_res[i,j-1] + wh*dij  
-                tableau_res[i,j] = min(terme1,terme2,terme3)
+                tableau_res[i, j] = tableau_res[i-1, j] + dij * wv
+            else:
+                terme1 = tableau_res[i-1, j] + wv * dij
+                terme2 = tableau_res[i-1, j-1] + wd * dij
+                terme3 = tableau_res[i, j-1] + wh * dij
+                tableau_res[i, j] = min(terme1, terme2, terme3)
                 
-    return tableau_res[len(a)-1,len(b)-1] 
+    # Retourner la distance élastique finale, qui est le coût minimal accumulé pour aligner toute la première séquence sur la seconde
+    return tableau_res[len(a)-1, len(b)-1]
 
+@njit
+def calculate_distance_matrix(train,test,batch_size):
     
+    matrix = np.zeros(( len(test),len(train)))
+
+    for i, lpc_one_audio_train in enumerate(train):
+        if i%batch_size == 0:
+            print(f"Calcul des distances avec la piste audio d'entrainement n°{i} sur {len(train)}")
+        for j, lpc_one_audio_test in enumerate(test):
+            matrix[j, i] = distance_elastique(lpc_one_audio_train, lpc_one_audio_test)
+    return matrix
+
+
+def k_min_args(list,k):
+    sorted_indices=np.argpartition(list,k)
+    return sorted_indices[:k]
+
+
+
 def knn_predict(dists, labels_train , k):
     assert len(labels_train)== dists.shape[1]
     predicted_labels= []
@@ -118,10 +164,9 @@ def knn_predict(dists, labels_train , k):
         predicted_labels.append(most_neighbor_label)
     return predicted_labels
 
-
 def split_train_test(lists, train_ratio=0.8, randomize=True):
     """
-    lists: liste de listes, par ex. [data_audio_lpc, data_Fe, labels].
+    lists: liste de listes, par ex. [data_audio, data_Fe, labels].
     On suppose que toutes ces listes ont la même longueur.
     """
     # Longueur commune à toutes les listes
@@ -154,85 +199,101 @@ def split_train_test(lists, train_ratio=0.8, randomize=True):
     
     return train_lists, test_lists
 
-def is_list_of_non_empty_lists(obj):
-    # Vérifie que l'objet est une liste
-    if not isinstance(obj, list):
-        return False
-    
-    # Vérifie que l'objet n'est pas vide
-    if len(obj) == 0:
-        return False
 
-    # Vérifie que tous les éléments sont des listes non vides
-    if not all(isinstance(elem, list) and len(elem) > 0 for elem in obj):
-        return False
 
-    return True
+def load_data(input_folder, Standart_FE=8000):
+    '''
+    Cette fonction charge les données audio à partir d'un dossier d'entrée, normalise les audios et extrait les frames.
 
-def normalize_lpc_coefficients(lpc_coeffs):
-    return lpc_coeffs / np.sqrt(np.sum(lpc_coeffs**2))
+    Arguments:
+    input_folder -- le dossier contenant les sous-dossiers avec les fichiers audio .wav
+    Standart_FE -- la fréquence d'échantillonnage à utiliser lors du chargement des fichiers audio (par défaut 8000)
 
-@njit
-def calculate_distance_matrix(train,test,batch_size):
-    
-    matrix = np.zeros(( len(test),len(train)))
+    Retourne:
+    data_audio -- une liste contenant les frames extraites de chaque fichier audio
+    data_Fe -- une liste contenant les fréquences d'échantillonnage de chaque fichier audio
+    labels -- une liste contenant les étiquettes (noms des sous-dossiers) de chaque fichier audio
 
-    for i, lpc_one_audio_train in enumerate(train):
-        if i%batch_size == 0:
-            print(f"Calcul des distances avec la piste audio d'entrainement n°{i} sur {len(train)}")
-        for j, lpc_one_audio_test in enumerate(test):
-            matrix[j, i] = distance_elastique(lpc_one_audio_train, lpc_one_audio_test)
-    return matrix
-
-def load_data(input_folder,Standart_FE = 8000):
-    data_Fe= []
+    Structure des fichiers:
+    Le dossier d'entrée doit contenir des sous-dossiers, chacun représentant une classe différente. 
+    Chaque sous-dossier doit contenir des fichiers audio au format .wav. 
+    Par exemple:
+    input_folder/
+        classe_1/
+           audio1.wav
+           audio2.wav
+        classe_2/
+            audio1.wav
+        audio2.wav
+    '''
+    # Initialiser les listes pour stocker les données extraites, les fréquences d'échantillonnage et les étiquettes
+    data_Fe = []
     labels = []
-    data_audio_lpc = []
+    data_audio = []
+
+    # Parcourir chaque répertoire dans le dossier d'entrée
     for dirname in os.listdir(input_folder):
         subfolder = os.path.join(input_folder, dirname)
+        
+        # Passer si ce n'est pas un répertoire
         if not os.path.isdir(subfolder):
             continue
         
+        # Parcourir chaque fichier .wav dans le sous-dossier
         for filename in [x for x in os.listdir(subfolder) if x.endswith('.wav')]:
             filepath = os.path.join(subfolder, filename)
-            audio, Fe = librosa.load(filepath,sr = Standart_FE)
             
-            # normaliser les audios.
-            audio = audio/np.max(np.abs(audio))
+            # Charger le fichier audio avec la fréquence d'échantillonnage spécifiée
+            audio, Fe = librosa.load(filepath, sr=Standart_FE)
+            
+            # Normaliser l'audio
+            audio = audio / np.max(np.abs(audio))
+            
+            # Extraire les frames de l'audio
             frames = auto_get_frames(audio, Fe)
-            data_audio_lpc.append(frames) 
+            
+            # Ajouter les frames extraites, la fréquence d'échantillonnage et l'étiquette aux listes respectives
+            data_audio.append(frames)
             data_Fe.append(Fe)
             labels.append(dirname)
-    return data_audio_lpc,data_Fe,labels        
+    
+    # Retourner les listes contenant les données extraites, les fréquences d'échantillonnage et les étiquettes
+    return data_audio, data_Fe, labels     
 
 if __name__ == "__main__":
-    input_folder='./digit_dataset'
+    input_folder = './digit_dataset'
 
-    # La séléction de paramètre à été réalisé au préalable
-    ordre_modele = 25
+    # La sélection de paramètres a été réalisée au préalable
+    ordre_modele = 10
     k = 5
 
-    data_audio_lpc,data_Fe,labels = load_data(input_folder)
+    # Charger les données audio
+    data_audio, data_Fe, labels = load_data(input_folder)
 
-    used_data, discarded_data = split_train_test([data_audio_lpc,data_Fe,labels], train_ratio=1)    
+    # Diviser les données en ensembles d'entraînement et de test
+    used_data, discarded_data = split_train_test([data_audio, data_Fe, labels], train_ratio=1)
     train_data, test_data = split_train_test(used_data, train_ratio=0.92)
 
+    # Extraire les données d'entraînement et de test
     (data_audio_train, data_Fe_train, original_labels_train) = train_data
     (data_audio_test, data_Fe_test, original_labels_test) = test_data
     accuracy = []
 
-    
-    list_of_audio_as_lpc_list_train,labels_train = process_audio_to_lpc(data_audio_train,original_labels_train,ordre_modele,200,"train")
-    list_of_audio_as_lpc_list_test,labels_test  = process_audio_to_lpc(data_audio_test ,original_labels_test ,ordre_modele,200,"test")  
-    matrix=calculate_distance_matrix(list_of_audio_as_lpc_list_train,list_of_audio_as_lpc_list_test,200)
+    # Convertir les données audio en coefficients LPC
+    list_of_audio_as_lpc_list_train, labels_train = process_audio_to_lpc(data_audio_train, original_labels_train, ordre_modele, 200, "train")
+    list_of_audio_as_lpc_list_test, labels_test = process_audio_to_lpc(data_audio_test, original_labels_test, ordre_modele, 200, "test")
 
+    # Calculer la matrice des distances
+    matrix = calculate_distance_matrix(list_of_audio_as_lpc_list_train, list_of_audio_as_lpc_list_test, 200)
 
-    predicted_labels = knn_predict(matrix,labels_train,k)
+    # Prédire les étiquettes avec k-NN
+    predicted_labels = knn_predict(matrix, labels_train, k)
     print(f"longueur des predictions: {len(predicted_labels)}, longueur des data_train : {len(list_of_audio_as_lpc_list_train)}, longueur des test : {len(list_of_audio_as_lpc_list_test)} ")
-    accuracy =sum([(predicted_labels[i] == labels_test[i]) for i in range(min(len(labels_test),len(predicted_labels)))])/min(len(labels_test),len(predicted_labels))
 
+    # Calculer la précision
+    accuracy = sum([(predicted_labels[i] == labels_test[i]) for i in range(min(len(labels_test), len(predicted_labels)))]) / min(len(labels_test), len(predicted_labels))
     print(f"On obtient un taux de classification correcte de {accuracy} %")
-
+    
 
     confusion_matrix = np.zeros((10,10))
     for  num,prediction in enumerate(predicted_labels):

@@ -90,26 +90,58 @@ def split_train_test_by_label(data_dict, train_ratio=0.8, randomize=True):
 
     return train_dict, test_dict
 
-def calculate_mfcc_and_length_for_dict(data_audio_Fe_dict,n_mfcc,win_length,hop_length):
+
+def calculate_mfcc_and_length_for_dict(data_audio_Fe_dict, n_mfcc, win_length, hop_length):
+    """
+    Calcule les coefficients cepstraux de fréquences Mel (MFCC) et les longueurs correspondantes 
+    pour un dictionnaire d'audios étiquetés. Ces données sont formatées pour être utilisées avec 
+    hmmlearn.hmm.GaussianHMM.fit.
+
+    Arguments :
+        - data_audio_Fe_dict (dict): Dictionnaire où les clefs sont des labels et les valeurs sont
+          des listes de tuples (audio, fréquence d'échantillonnage).
+        - n_mfcc (int): Nombre de coefficients MFCC à extraire.
+        - win_length (int): Longueur de la fenêtre (en nombre d'échantillons).
+        - hop_length (int): Décalage entre les fenêtres successives (en nombre d'échantillons).
+
+    Retourne :
+        - mfcc_dict (dict): Dictionnaire des MFCC concaténés pour chaque label.
+        - length_dict (dict): Dictionnaire des longueurs (nombre de fenêtres) pour chaque fichier audio.
+    """
+
     mfcc_dict = {}
     length_dict = {}
+
+    # Parcours des labels du dictionnaire d'entrée
     for label in data_audio_Fe_dict.keys():
-
-
-        data_audio = []
-        data_Fe_train = []
-        for audio,Fe in data_audio_Fe_dict[label]:
+        
+        # Extraction des données audio et fréquences d'échantillonnage associées
+        data_audio = []  # Liste pour les fichiers audio de ce label
+        data_Fe_train = []  # Liste pour les fréquences d'échantillonnage correspondantes
+        for audio, Fe in data_audio_Fe_dict[label]:
             data_audio.append(audio)
             data_Fe_train.append(Fe)
 
         train_mfcc = []
-        lengths= []
+        lengths = []
+
+        # Calcul des MFCC pour chaque fichier audio
         for num_audio, audio_train in enumerate(data_audio):
-            mfcc_features = mfcc(y=audio_train, sr=data_Fe_train[num_audio], n_mfcc=n_mfcc, win_length=win_length, hop_length=hop_length)
+
+            # Calcul des MFCC pour un fichier audio donné
+            mfcc_features = mfcc(y=audio_train, sr=data_Fe_train[num_audio], 
+                                  n_mfcc=n_mfcc, win_length=win_length, 
+                                  hop_length=hop_length)
+
+            # Transpose des MFCC pour que chaque ligne corresponde à une fenêtre
             train_mfcc.append(mfcc_features.T)
+
+            # Stockage de la longueur (nombre de fenêtres) de cet audio
             lengths.append(len(mfcc_features.T))
 
         length_dict[label] = lengths
+
+        # Concaténation des MFCC pour tous les fichiers audio d'un même label
         mfcc_dict[label] = np.concatenate(train_mfcc, axis=0)
 
     return mfcc_dict, length_dict

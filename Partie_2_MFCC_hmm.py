@@ -90,7 +90,6 @@ def split_train_test_by_label(data_dict, train_ratio=0.8, randomize=True):
 
     return train_dict, test_dict
 
-
 def calculate_mfcc_and_length_for_dict(data_audio_Fe_dict, n_mfcc, win_length, hop_length):
     """
     Calcule les coefficients cepstraux de fréquences Mel (MFCC) et les longueurs correspondantes 
@@ -147,36 +146,65 @@ def calculate_mfcc_and_length_for_dict(data_audio_Fe_dict, n_mfcc, win_length, h
     return mfcc_dict, length_dict
 
 def test_model(model_dict, test_mfcc_dict, lengths_test):
+    """
+    Teste les modèles HMM sur les données de test en prédisant la classe de chaque échantillon.
+
+    Arguments:
+    model_dict -- Dictionnaire des modèles HMM entraînés par label 
+    test_mfcc_dict -- Dictionnaire contenant les coefficients MFCC concaténés des fichiers test par label
+    lengths_test -- Dictionnaire contenant les longueurs de chaque échantillon MFCC par label
+
+    Retourne:
+    accuracy -- Taux de classification correcte (somme diagonale / somme totale de la matrice de confusion)
+    confusion_matrix -- Matrice de confusion (lignes = vraies classes, colonnes = classes prédites)
+    """
+    # Obtenir la liste des labels à partir des clés du dictionnaire des modèles
     label_list = list(model_dict.keys())
+    # Initialiser la matrice de confusion
     confusion_matrix = np.zeros((len(label_list), len(label_list)), dtype=int)
+
+    # Pour chaque vrai label
     for true_label_idx, true_label in enumerate(label_list):
-        # Calculate cumulative sums of lengths for proper indexing
+        # Calculer les indices de début de chaque échantillon dans la matrice concaténée
+        # en faisant la somme cumulée des longueurs des échantillons précédents
         cumsum = np.cumsum([0] + lengths_test[true_label][:-1])
         
-        # Extract individual samples using cumulative indices
+        # Extraire chaque échantillon individuel à partir de la matrice concaténée
+        # en utilisant les indices de début et les longueurs correspondantes
         mfcc_individual_samples = [
             test_mfcc_dict[true_label][start:start + length] 
             for start, length in zip(cumsum, lengths_test[true_label])
         ]
-        for id_sample , mfcc_sample in enumerate(mfcc_individual_samples):
 
+        # Pour chaque échantillon extrait
+        for mfcc_sample in mfcc_individual_samples:
+
+            # Initialiser le meilleur score et l'indice du meilleur label
             best_score = -np.inf
             best_label_idx = None
 
+            # Pour chaque label candidat
             for candidate_label_idx, candidate_label in enumerate(label_list):
                 model = model_dict[candidate_label]
                 if model is None:
                     continue
+                # Calculer le score du modèle sur l'échantillon
                 score = model.score(mfcc_sample)
+                # Mettre à jour le meilleur score si nécessaire
                 if score > best_score:
                     best_score = score
                     best_label_idx = candidate_label_idx
 
+            # Incrémenter la matrice de confusion
             if best_label_idx is not None:
                 confusion_matrix[true_label_idx, best_label_idx] += 1
+
+    # Calculer l'accuracy comme le rapport entre les prédictions correctes et le total
     accuracy = np.sum(np.diag(confusion_matrix)) / np.sum(confusion_matrix)
+    
     return accuracy, confusion_matrix
-            
+
+
 if __name__ == "__main__":
     
     input_folder = './digit_dataset'
@@ -189,10 +217,10 @@ if __name__ == "__main__":
     # 1) Chargement des données
     data_audio = load_data(input_folder, sr=sr, exclude_substring='theo')
     
-    # 2) Split data into train and valid sets by label
+    # 2) Séparation des données en ensembles d'entraînement et de validation
     data_audio_Fe_train, data_audio_Fe_valid = split_train_test_by_label(data_audio, train_ratio=0.8, randomize=True)
 
-    # 3) Calculate MFCC and lengths for train and valid sets
+    # 3) Calcul des MFCC et longueurs pour les données d'entraînement et de validation
     train_mfcc_dict, lengths_train = calculate_mfcc_and_length_for_dict(data_audio_Fe_train, n_mfcc, win_length, hop_length)
     valid_mfcc_dict, lengths_valid = calculate_mfcc_and_length_for_dict(data_audio_Fe_valid, n_mfcc, win_length, hop_length)
     
@@ -200,7 +228,7 @@ if __name__ == "__main__":
     # Liste de tous les labels (ex: ['0', '1', '2', ...])
     label_list = list(data_audio.keys())
 
-    # 4) Validate HMM models with different hyperparameters
+    # 4) Entraînement et test des modèles HMM de validation
 
 #    n_components_list = [2,4,6,8]
 #    n_iters = range(500, 5001, 500)
@@ -233,36 +261,42 @@ if __name__ == "__main__":
 #    plt.show()
 
     # 5) Test final avec les audio de theo
-
+    # Chemin vers le dossier contenant les données audio
     input_folder = './digit_dataset'
+    # Fréquence d'échantillonnage standard pour tous les fichiers
     sr = 16000
 
-    n_mfcc = 15
-    win_length=512
-    hop_length=512//2
+    # Paramètres pour l'extraction des MFCC
+    n_mfcc = 15 
+    win_length = 512  
+    hop_length = 512//2 
 
+    # Chargement des données d'entraînement (tous les fichiers sauf ceux contenant 'theo')
     data_audio = load_data(input_folder, sr=sr, exclude_substring='theo')
     train_mfcc_dict, lengths_train = calculate_mfcc_and_length_for_dict(data_audio, n_mfcc, win_length, hop_length)
 
-
+    # Chargement des données de test (uniquement les fichiers contenant 'theo')
     data_audio_Fe_test = load_data(input_folder, sr=sr, include_substring='theo')
-    test_mfcc_dict, lengths_test = calculate_mfcc_and_length_for_dict(data_audio_Fe_test,n_mfcc, win_length, hop_length)
+    test_mfcc_dict, lengths_test = calculate_mfcc_and_length_for_dict(data_audio_Fe_test, n_mfcc, win_length, hop_length)
 
-    n_components = 10
-    n_iter = 5000
+    # Paramètres du modèle HMM
+    n_components = 10  
+    n_iter = 5000 
 
+    # Entraînement d'un modèle HMM pour chaque label
     model_dict = {}
     for label in label_list:
+        # Création et entraînement du modèle HMM gaussien
         model = hmm.GaussianHMM(n_components=n_components, n_iter=n_iter, covariance_type='diag')
         model.fit(train_mfcc_dict[label], lengths_train[label])
         model_dict[label] = model
 
-    # 5) valid instance par instance
+    # Initialisation de la matrice de confusion
     num_labels = len(label_list)
     confusion_matrix = np.zeros((num_labels, num_labels), dtype=int)
 
+    # Test du modèle et calcul de la précision
     accuracy, confusion_matrix = test_model(model_dict, valid_mfcc_dict, lengths_valid)
-
 
     print(f"Test accuracy: {accuracy}")
     # Affichage
@@ -279,6 +313,13 @@ if __name__ == "__main__":
 
     plt.xticks(np.arange(num_labels), label_list, rotation=45)
     plt.yticks(np.arange(num_labels), label_list)
+
+    # Add text annotations to show the number in each cell
+    for i in range(num_labels):
+        for j in range(num_labels):
+            plt.text(j, i, str(confusion_matrix[i, j]),
+                    horizontalalignment='center',
+                    verticalalignment='center')
 
     plt.ylabel('True label')
     plt.xlabel('Predicted label')

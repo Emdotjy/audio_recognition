@@ -141,12 +141,9 @@ def calculate_distance_matrix(train,test,batch_size):
             matrix[j, i] = distance_elastique(lpc_one_audio_train, lpc_one_audio_test)
     return matrix
 
-
 def k_min_args(list,k):
     sorted_indices=np.argpartition(list,k)
     return sorted_indices[:k]
-
-
 
 def knn_predict(dists, labels_train , k):
     assert len(labels_train)== dists.shape[1]
@@ -198,8 +195,6 @@ def split_train_test(lists, train_ratio=0.8, randomize=True):
         test_lists.append([lst[i] for i in indices[split_index:]])
     
     return train_lists, test_lists
-
-
 
 def load_data(input_folder, Standart_FE=8000):
     '''

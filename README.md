@@ -105,8 +105,8 @@ Pour l'approche MFCC + HMM :
 
 ## 👨‍💻 Auteurs
 
-- **Rémy GASMI**
-- **Simon VINCENT**
+- **Rémy GASMI** : https://github.com/Mastocodeur
+- **Simon VINCENT** : https://github.com/Emdotjy
 
 ---
 

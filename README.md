@@ -1,3 +1,7 @@
+# Audio_recognition
+
+Projet d'école réalisé par Simon Vincent et Gasmi Rémy
+=======
 # Projet de Reconnaissance Vocale : LPC & MFCC avec k-NN et HMM
 
 Ce projet a été réalisé dans le cadre du module **"Traitement et Analyse des Données Visuelles et Sonores"** à l'École Centrale de Lyon. L'objectif était de développer des systèmes simples de reconnaissance de la parole en utilisant deux approches différentes : les **coefficients LPC (Linear Predictive Coding)** avec la méthode des **k plus proches voisins (k-NN)**, et les **coefficients MFCC (Mel-Frequency Cepstral Coefficients)** avec les **Modèles de Markov Cachés (HMM)**.
@@ -116,3 +120,4 @@ Pour l'approche MFCC + HMM :
 Un grand merci à **Emmanuel DELLANDRÉA** pour son encadrement et ses précieux conseils tout au long de ce projet.
 
 ---
+

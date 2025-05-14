@@ -116,9 +116,9 @@ Pour l'approche MFCC + HMM :
 
 ## 🙏 Remerciements
 
-Un grand merci à **Emmanuel DELLANDRÉA** pour son encadrement et ses précieux conseils tout au long de ce projet et bonne lecture à tous !
 
-A bientôt pour de nouveaux projets ! 
+Un grand merci à **Emmanuel DELLANDRÉA** pour son encadrement et ses précieux conseils tout au long de ce projet. Merci à tous ! 
+
 
 ---
 
